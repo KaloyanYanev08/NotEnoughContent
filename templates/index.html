@@ -1,1 +1,12 @@
-This is NEC (Not enough content)
+<div class="articles">
+    {% for article in articles %}
+    <div class="article">
+        <h2>{{ article.title }}</h2>
+        {% if article.picture %}
+        <img src="{{ url_for('static', filename='images/' + article.picture.name) }}" alt="{{ article.title }}">
+        {% endif %}
+        <p>Description: {{ article.description }}</p>  <!-- Display description -->
+        <p>Access: {{ article.access.name }}</p>
+    </div>
+    {% endfor %}
+</div>
