@@ -110,29 +110,31 @@ def index():
         article.picture = Img.query.filter_by(article_id=article.id).first()
     return render_template('index.html', articles=articles)
 
-@app.route('/create_article', methods=['POST'])
+@app.route('/create_article', methods=['GET', 'POST'])
 def create_article():
-    title = request.form['title']
-    description = request.form['description']
-    access_id = request.form['access_id']
-    picture = request.files['picture_data']
+    if request.method == 'POST':
+        title = request.form['title']
+        description = request.form['description']
+        access_id = request.form['access_id']
+        picture = request.files['picture_data']
 
-    if not picture:
-        return 'No picture uploaded', 400
-    
-    print(f"Uploaded picture: {picture.filename}")
+        if not picture:
+            return 'No picture uploaded', 400
 
-    article = Article(title=title, description=description, access_id=access_id)
-    db.session.add(article)
-    db.session.commit()
+        print(f"Uploaded picture: {picture.filename}")
 
-    # Retrieve the article from the database to ensure correct ID
-    article = Article.query.filter_by(title=title).first()
+        article = Article(title=title, description=description, access_id=access_id)
+        db.session.add(article)
+        db.session.commit()
 
-    save_picture_data(article.id, picture)
+        article = Article.query.filter_by(title=title).first()
 
-    return 'Article created successfully!'
+        save_picture_data(article.id, picture)
 
+        return 'Article created successfully!'
+    else:
+        access_options = get_all_access_options()
+        return render_template('create_article.html', access_options=access_options)
 
 if __name__ == "__main__":
     app.run(debug=True)
