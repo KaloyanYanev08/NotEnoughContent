@@ -11,10 +11,16 @@
         {% for article in articles %}
             <h2>{{ article.title }}</h2>
             <p>{{ article.description }}</p>
+            {% if article.picture %}
                 <img src="data:{{ article.picture.mimetype }};base64,{{ article.picture.img_base64 }}" alt="{{ article.picture.name }}">
+            {% endif %}
             {% if article.access %}
                 <p>Access: {{ article.access.name }}</p>
             {% endif %}
+            {% for paragraph in article.paragraphs %}
+                <h3>{{ paragraph.title }}</h3>
+                <p>{{ paragraph.body }}</p>
+            {% endfor %}
         {% endfor %}
     </div>
 </body>

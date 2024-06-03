@@ -1,8 +1,8 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
-from wtforms import FileField, TextAreaField, SelectField, StringField, Form
+from wtforms import FileField, TextAreaField, SelectField, StringField, Form, FieldList, FormField
 import base64
 
 app = Flask(__name__)
@@ -51,13 +51,9 @@ def save_picture_data(article_id, picture):
         mimetype = picture.mimetype
         img_base64 = base64.b64encode(picture.read()).decode('utf-8')
         
-        print(f"Processing picture: {filename}, mimetype: {mimetype}")
-        print(f"Base64 encoded image: {img_base64[:30]}...")  # Print first 30 characters for brevity
-        
         img = Img(name=filename, mimetype=mimetype, img_base64=img_base64, article_id=article_id)
         db.session.add(img)
         db.session.commit()
-        print("Image saved to database.")
 
 def get_all_access_options():
     return Access.query.all()
@@ -71,10 +67,15 @@ with app.app_context():
 
 admin = Admin(app, name='Admin Panel', template_mode='bootstrap3')
 
+class ParagraphForm(Form):
+    title = StringField('Paragraph Title')
+    body = TextAreaField('Paragraph Body')
+
 class ArticleForm(Form):
     title = StringField('Title')
     description = TextAreaField('Description')
     access_id = SelectField('Access', coerce=int)
+    paragraphs = FieldList(FormField(ParagraphForm), min_entries=1)
 
 class ArticleView(ModelView):
     form_extra_fields = {
@@ -108,6 +109,7 @@ def index():
     articles = Article.query.all()
     for article in articles:
         article.picture = Img.query.filter_by(article_id=article.id).first()
+        article.paragraphs = Paragraph.query.filter_by(article_id=article.id).all()
     return render_template('index.html', articles=articles)
 
 @app.route('/create_article', methods=['GET', 'POST'])
@@ -117,24 +119,31 @@ def create_article():
         description = request.form['description']
         access_id = request.form['access_id']
         picture = request.files['picture_data']
-
-        if not picture:
-            return 'No picture uploaded', 400
-
-        print(f"Uploaded picture: {picture.filename}")
-
+        
         article = Article(title=title, description=description, access_id=access_id)
         db.session.add(article)
         db.session.commit()
 
-        article = Article.query.filter_by(title=title).first()
+        article_id = article.id
+        save_picture_data(article_id, picture)
 
-        save_picture_data(article.id, picture)
-
+        for key, value in request.form.items():
+            if key.startswith('paragraphs['):
+                index = key.split('[')[1].split(']')[0]
+                para_title = request.form.get(f'paragraphs[{index}][title]')
+                para_body = request.form.get(f'paragraphs[{index}][body]')
+                if para_title and para_body:
+                    paragraph = Paragraph(title=para_title, body=para_body, article_id=article_id)
+                    db.session.add(paragraph)
+        
+        db.session.commit()
+        
         return 'Article created successfully!'
     else:
         access_options = get_all_access_options()
         return render_template('create_article.html', access_options=access_options)
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)
