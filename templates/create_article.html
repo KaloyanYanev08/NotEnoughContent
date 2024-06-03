@@ -6,28 +6,28 @@
     <script>
         function addParagraph() {
             const container = document.getElementById('paragraphs-container');
-            const index = container.children.length / 3;
-
+            const index = container.children.length / 5;
+        
             const titleLabel = document.createElement('label');
             titleLabel.innerText = 'Paragraph Title:';
             const titleInput = document.createElement('input');
             titleInput.type = 'text';
             titleInput.name = `paragraphs[${index}].title`;
             titleInput.required = true;
-
+        
             const bodyLabel = document.createElement('label');
             bodyLabel.innerText = 'Paragraph Body:';
             const bodyInput = document.createElement('textarea');
             bodyInput.name = `paragraphs[${index}].body`;
             bodyInput.required = true;
-
+        
             container.appendChild(titleLabel);
             container.appendChild(titleInput);
             container.appendChild(document.createElement('br'));
             container.appendChild(bodyLabel);
             container.appendChild(bodyInput);
             container.appendChild(document.createElement('br'));
-        }
+        }               
     </script>
 </head>
 <body>

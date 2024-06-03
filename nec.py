@@ -115,11 +115,12 @@ def index():
 @app.route('/create_article', methods=['GET', 'POST'])
 def create_article():
     if request.method == 'POST':
+        # Extract data for the article
         title = request.form['title']
         description = request.form['description']
         access_id = request.form['access_id']
         picture = request.files['picture_data']
-        
+
         article = Article(title=title, description=description, access_id=access_id)
         db.session.add(article)
         db.session.commit()
@@ -127,22 +128,21 @@ def create_article():
         article_id = article.id
         save_picture_data(article_id, picture)
 
-        for key, value in request.form.items():
-            if key.startswith('paragraphs['):
-                index = key.split('[')[1].split(']')[0]
-                para_title = request.form.get(f'paragraphs[{index}][title]')
-                para_body = request.form.get(f'paragraphs[{index}][body]')
-                if para_title and para_body:
-                    paragraph = Paragraph(title=para_title, body=para_body, article_id=article_id)
-                    db.session.add(paragraph)
-        
+        paragraphs_data = request.form.getlist('paragraphs')
+
+        for para_data in paragraphs_data:
+            para_title = para_data['title']
+            para_body = para_data['body']
+            if para_title and para_body:
+                paragraph = Paragraph(title=para_title, body=para_body, article_id=article_id)
+                db.session.add(paragraph)
+
         db.session.commit()
-        
+
         return 'Article created successfully!'
     else:
         access_options = get_all_access_options()
         return render_template('create_article.html', access_options=access_options)
-
 
 
 if __name__ == "__main__":
