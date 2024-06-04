@@ -43,7 +43,7 @@ class Paragraph(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100), nullable=False)
     body = db.Column(db.Text, nullable=False)
-    article_id = db.Column(db.Integer, db.ForeignKey('article.id'), nullable=False)
+    article_id = db.Column(db.Integer, db.ForeignKey('article.id'))
 
 def save_picture_data(article_id, picture):
     if picture:
@@ -115,7 +115,6 @@ def index():
 @app.route('/create_article', methods=['GET', 'POST'])
 def create_article():
     if request.method == 'POST':
-        # Extract data for the article
         title = request.form['title']
         description = request.form['description']
         access_id = request.form['access_id']
@@ -128,11 +127,12 @@ def create_article():
         article_id = article.id
         save_picture_data(article_id, picture)
 
-        paragraphs_data = request.form.getlist('paragraphs')
-
-        for para_data in paragraphs_data:
-            para_title = para_data['title']
-            para_body = para_data['body']
+        paragraphs_data = request.form.to_dict(flat=False)
+        paragraph_titles = paragraphs_data.get('paragraphs[0].title', [])
+        
+        for i in range(len(paragraph_titles)):
+            para_title = paragraphs_data[f'paragraphs[{i}].title'][0]
+            para_body = paragraphs_data[f'paragraphs[{i}].body'][0]
             if para_title and para_body:
                 paragraph = Paragraph(title=para_title, body=para_body, article_id=article_id)
                 db.session.add(paragraph)
@@ -143,7 +143,6 @@ def create_article():
     else:
         access_options = get_all_access_options()
         return render_template('create_article.html', access_options=access_options)
-
 
 if __name__ == "__main__":
     app.run(debug=True)
