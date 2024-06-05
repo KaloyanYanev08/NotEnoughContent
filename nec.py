@@ -5,9 +5,8 @@ from flask_admin.contrib.sqla import ModelView
 from wtforms import FileField, TextAreaField, SelectField, StringField, Form, FieldList, FormField
 import base64
 from werkzeug.security import generate_password_hash
-from getpass import getpass
-import sys
-from flask_security import Security, SQLAlchemyUserDatastore, UserMixin, RoleMixin, login_required
+import pkg_resources
+print(pkg_resources.__file__)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data.db'
