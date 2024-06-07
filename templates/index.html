@@ -6,6 +6,9 @@
     <title>Articles</title>
 </head>
 <body>
+    {% if user.is_authenticated %}
+        <h1>You are logged in</h1>
+    {% endif %}
     <h1>Articles</h1>
     <div>
         {% for article in articles %}
