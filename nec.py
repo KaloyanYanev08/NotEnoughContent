@@ -1,10 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin, AdminIndexView, expose
 from flask_admin.contrib.sqla import ModelView
 from wtforms import FileField, TextAreaField, SelectField, StringField, Form, FieldList, FormField, PasswordField, SubmitField, ValidationError
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin
-from wtforms.validators import DataRequired, Email, EqualTo
+from wtforms.validators import DataRequired, Email, EqualTo, Length
 from flask_wtf import FlaskForm
 import base64
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -50,7 +50,7 @@ class User(db.Model, UserMixin):
     def __init__(self, username, email, password, superuser=False, role=1):
         self.username = username
         self.email = email
-        self.password = password
+        self.password = generate_password_hash(password)
         self.role = role
         self.superuser = superuser
     
@@ -89,13 +89,19 @@ class Paragraph(db.Model):
 
 def save_picture_data(article_id, picture):
     if picture:
+        old_picture = Img.query.filter_by(article_id=article_id).first()
+        if old_picture:
+            db.session.delete(old_picture)
+            db.session.commit()
+
         filename = picture.filename
         mimetype = picture.mimetype
         img_base64 = base64.b64encode(picture.read()).decode('utf-8')
-        
+
         img = Img(name=filename, mimetype=mimetype, img_base64=img_base64, article_id=article_id)
         db.session.add(img)
         db.session.commit()
+
 
 def get_all_access_options():
     return Access.query.all()
@@ -133,7 +139,7 @@ login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return User.query.filter_by(id=user_id).first()
 
 class MyAdminIndexView(AdminIndexView):
     @expose('/')
@@ -151,17 +157,25 @@ class MyModelView(ModelView):
 
 admin = Admin(app, name='Admin Panel', template_mode='bootstrap3', index_view=MyAdminIndexView())
 admin.add_view(MyModelView(User, db.session))
+admin.add_view(MyModelView(Role, db.session))
 admin.add_view(MyModelView(Article, db.session))
 admin.add_view(MyModelView(Access, db.session))
 admin.add_view(MyModelView(Paragraph, db.session))
-admin.add_view(MyModelView(Img, db.session))
-admin.add_view(MyModelView(ProfileImg, db.session))
+
+class UserForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=1, max=20)])
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
+    role = SelectField('Role', coerce=int, validators=[DataRequired()])
+    superuser = SelectField('Superuser', coerce=bool, validators=[DataRequired()])
+    submit = SubmitField('Submit')
 
 class ParagraphForm(Form):
     title = StringField('Paragraph Title')
     body = TextAreaField('Paragraph Body')
 
-class ArticleForm(Form):
+class ArticleForm(FlaskForm):
     title = StringField('Title')
     description = TextAreaField('Description')
     access_id = SelectField('Access', coerce=int)
@@ -191,23 +205,11 @@ class ArticleView(ModelView):
             save_picture_data(article_id, picture)
 
 class UserView(MyModelView):
-        column_list = ['username', 'email', 'nickname', 'role', 'superuser']
-        form_columns = ['username', 'email', 'password', 'nickname', 'role', 'superuser']
-        form_extra_fields = {
-            'password': StringField('Password'),
-        }
-
-class ImgView(MyModelView):
-    column_list = ['name', 'mimetype', 'article_id']
-    form_columns = ['name', 'mimetype', 'img_base64', 'article_id']
-    can_view_details = True
-    column_details_list = ['name', 'mimetype', 'img_base64', 'article_id']
-
-class ProfileImgView(MyModelView):
-    column_list = ['name', 'mimetype', 'user_id']
-    form_columns = ['name', 'mimetype', 'img_base64', 'user_id']
-    can_view_details = True
-    column_details_list = ['name', 'mimetype', 'img_base64', 'user_id']
+    column_list = ['username', 'email', 'nickname', 'role', 'superuser']
+    form_columns = ['username', 'email', 'password', 'nickname', 'role', 'superuser']
+    form_extra_fields = {
+        'password': StringField('Password'),
+    }
 
 class RegistrationForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
@@ -280,11 +282,11 @@ def register():
         return redirect(url_for('index'))
 
     form = RegistrationForm()
-    if form.validate_on_submit():
+    if request.method == 'POST' and form.validate_on_submit():
         existing_users_count = User.query.count()
         
         if existing_users_count == 0:
-            new_user = User(username=form.username.data, email=form.email.data, password=form.password.data, superuser=True)
+            new_user = User(username=form.username.data, email=form.email.data, password=form.password.data, superuser=True, role=3)
         else:
             new_user = User(username=form.username.data, email=form.email.data, password=form.password.data)
         
@@ -296,6 +298,7 @@ def register():
         flash('Account created successfully!', 'success')
         return redirect(url_for('index'))
     return render_template('register.html', form=form)
+
 
 @app.route('/logout')
 @login_required
@@ -310,17 +313,51 @@ def login():
         return redirect(url_for('index'))
     
     form = LoginForm()
-    if form.validate_on_submit():
+    if request.method == 'POST' and form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
-        if user and user.check_password(form.password.data):
-            login_user(user)
-            flash('Login successful!', 'success')
-            next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(url_for('index'))
+        if user:
+            print("User found: ", user.username)
+            if user.check_password(form.password.data):
+                print("Password check passed")
+                login_user(user)
+                flash('Login successful!', 'success')
+                return redirect(url_for('index'))
+            else:
+                print("Password check failed")
         else:
-            flash('Login failed. Check your email and password.', 'danger')
+            print("User not found")
+        flash('Login failed. Check your email and password.', 'danger')
     
-    return render_template('login.html', form=form)
+    response = make_response(render_template('login.html', form=form))
+    response.headers['Content-Type'] = 'text/html'
+    return response
+
+@app.route('/edit_article/<int:article_id>', methods=['GET', 'POST'])
+def edit_article(article_id):
+    article = Article.query.get_or_404(article_id)
+    form = ArticleForm()
+
+    access_options = get_all_access_options() or []
+    form.access_id.choices = [(access.id, access.name) for access in access_options]
+
+    if form.validate_on_submit():
+        article.title = form.title.data
+        article.description = form.description.data
+        article.access_id = form.access_id.data
+
+        if 'picture_data' in request.files:
+            picture = request.files['picture_data']
+            save_picture_data(article.id, picture)
+
+        db.session.commit()
+        flash('Article updated successfully!', 'success')
+        return redirect(url_for('index'))
+
+    form.title.data = article.title
+    form.description.data = article.description
+    form.access_id.data = article.access_id
+
+    return render_template('edit_article.html', form=form, article=article)
 
 if __name__ == "__main__":
     app.run(debug=True)
