@@ -336,27 +336,30 @@ def login():
 @app.route('/edit_article/<int:article_id>', methods=['GET', 'POST'])
 def edit_article(article_id):
     article = Article.query.get_or_404(article_id)
-    form = ArticleForm()
+    form = ArticleForm(obj=article)
 
     access_options = get_all_access_options() or []
     form.access_id.choices = [(access.id, access.name) for access in access_options]
 
     if request.method == 'POST' and form.validate_on_submit():
-        article.title = form.title.data
-        article.description = form.description.data
-        article.access_id = form.access_id.data
+        form.populate_obj(article)
 
+        updated_paragraphs = []
         for idx, para_form in enumerate(form.paragraphs):
             para_title = para_form.title.data
             para_body = para_form.body.data
 
-            if idx < len(article.paragraphs):
-                existing_para = article.paragraphs[idx]
-                existing_para.title = para_title
-                existing_para.body = para_body
+            if para_title and para_body:
+                if idx < len(article.paragraphs):
+                    existing_para = article.paragraphs[idx]
+                    existing_para.title = para_title
+                    existing_para.body = para_body
+                else:
+                    new_para = Paragraph(title=para_title, body=para_body, article_id=article.id)
+                    db.session.add(new_para)
+                updated_paragraphs.append(True)
             else:
-                new_para = Paragraph(title=para_title, body=para_body, article_id=article.id)
-                db.session.add(new_para)
+                updated_paragraphs.append(False)
 
         if len(form.paragraphs) < len(article.paragraphs):
             for idx in range(len(form.paragraphs), len(article.paragraphs)):
@@ -369,13 +372,6 @@ def edit_article(article_id):
         db.session.commit()
         flash('Article updated successfully!', 'success')
         return redirect(url_for('index'))
-
-    form.title.data = article.title
-    form.description.data = article.description
-    form.access_id.data = article.access_id
-
-    for para in article.paragraphs:
-        form.paragraphs.append_entry({'title': para.title, 'body': para.body})
 
     return render_template('edit_article.html', form=form, article=article)
 

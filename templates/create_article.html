@@ -27,6 +27,24 @@
             container.appendChild(bodyLabel);
             container.appendChild(bodyInput);
             container.appendChild(document.createElement('br'));
+
+            document.getElementById('remove-paragraph-btn').disabled = false;
+        }
+
+        function removeParagraph() {
+            const container = document.getElementById('paragraphs-container');
+            if (container.children.length > 6) {
+                container.removeChild(container.lastElementChild);
+                container.removeChild(container.lastElementChild);
+                container.removeChild(container.lastElementChild);
+                container.removeChild(container.lastElementChild);
+                container.removeChild(container.lastElementChild);
+                container.removeChild(container.lastElementChild);
+            }
+
+            if (container.children.length <= 6) {
+                document.getElementById('remove-paragraph-btn').disabled = true;
+            }
         }
     </script>
 </head>
@@ -56,7 +74,8 @@
             <label for="paragraph_body">Paragraph Body:</label>
             <textarea id="paragraph_body" name="paragraphs[0].body" required></textarea><br><br>
         </div>
-        <button type="button" onclick="addParagraph()">Add Paragraph</button><br><br>
+        <button type="button" onclick="addParagraph()">Add Paragraph</button>
+        <button type="button" id="remove-paragraph-btn" onclick="removeParagraph()" disabled>Remove Paragraph</button><br><br>
         
         <button type="submit">Create Article</button>
     </form>
