@@ -75,6 +75,7 @@ class Article(db.Model):
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     access_id = db.Column(db.Integer, db.ForeignKey('access.id'), nullable=False)
+    paragraphs = db.relationship('Paragraph', backref='article', lazy=True)
 
     def __init__(self, title, description, access_id):
         self.title = title
@@ -340,10 +341,26 @@ def edit_article(article_id):
     access_options = get_all_access_options() or []
     form.access_id.choices = [(access.id, access.name) for access in access_options]
 
-    if form.validate_on_submit():
+    if request.method == 'POST' and form.validate_on_submit():
         article.title = form.title.data
         article.description = form.description.data
         article.access_id = form.access_id.data
+
+        for idx, para_form in enumerate(form.paragraphs):
+            para_title = para_form.title.data
+            para_body = para_form.body.data
+
+            if idx < len(article.paragraphs):
+                existing_para = article.paragraphs[idx]
+                existing_para.title = para_title
+                existing_para.body = para_body
+            else:
+                new_para = Paragraph(title=para_title, body=para_body, article_id=article.id)
+                db.session.add(new_para)
+
+        if len(form.paragraphs) < len(article.paragraphs):
+            for idx in range(len(form.paragraphs), len(article.paragraphs)):
+                db.session.delete(article.paragraphs[idx])
 
         if 'picture_data' in request.files:
             picture = request.files['picture_data']
@@ -356,6 +373,9 @@ def edit_article(article_id):
     form.title.data = article.title
     form.description.data = article.description
     form.access_id.data = article.access_id
+
+    for para in article.paragraphs:
+        form.paragraphs.append_entry({'title': para.title, 'body': para.body})
 
     return render_template('edit_article.html', form=form, article=article)
 

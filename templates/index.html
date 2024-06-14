@@ -10,7 +10,6 @@
         <h1>You are logged in</h1>
         <div>
             <h2>Welcome, {% if user.nickname %}{{ user.nickname }}{% else %}{{ user.username }}{% endif %}</h2>
-            <p>Role: {{ current_user.role.name }}</p>
             {% if user.profile_img %}
                 <img src="data:{{ user.profile_img.mimetype }};base64,{{ user.profile_img.img_base64 }}" alt="{{ user.profile_img.name }}">
             {% endif %}

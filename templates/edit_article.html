@@ -6,19 +6,19 @@
     <script>
         function addParagraph() {
             const container = document.getElementById('paragraphs-container');
-            const index = container.children.length / 5;
+            const index = container.children.length / 2;
 
             const titleLabel = document.createElement('label');
             titleLabel.innerText = 'Paragraph Title:';
             const titleInput = document.createElement('input');
             titleInput.type = 'text';
-            titleInput.name = `paragraphs[${index}].title`;
+            titleInput.name = `paragraphs-${index}-title`;
             titleInput.required = true;
 
             const bodyLabel = document.createElement('label');
             bodyLabel.innerText = 'Paragraph Body:';
             const bodyInput = document.createElement('textarea');
-            bodyInput.name = `paragraphs[${index}].body`;
+            bodyInput.name = `paragraphs-${index}-body`;
             bodyInput.required = true;
 
             container.appendChild(titleLabel);
@@ -28,17 +28,10 @@
             container.appendChild(bodyInput);
             container.appendChild(document.createElement('br'));
         }
-
-        function removeParagraph() {
-            const container = document.getElementById('paragraphs-container');
-            const paragraphs = container.getElementsByClassName('paragraph');
-            if (paragraphs.length > 1) {
-                container.removeChild(paragraphs[paragraphs.length - 1]);
-            }
-        }              
     </script>
 </head>
-<h1>Edit Article</h1>
+<body>
+    <h1>Edit Article</h1>
     <form action="/edit_article/{{ article.id }}" method="post" enctype="multipart/form-data">
         {{ form.hidden_tag() }}
         <label for="title">Title:</label>
@@ -47,6 +40,7 @@
         <label for="description">Description:</label>
         <textarea id="description" name="description" required>{{ form.description.data }}</textarea><br><br>
         
+        <label for="access_id">Access:</label>
         <select id="access_id" name="access_id" required>
             {% for access_id, access_name in form.access_id.choices %}
                 <option value="{{ access_id }}" {% if access_id == form.access_id.data %} selected {% endif %}>{{ access_name }}</option>
@@ -54,21 +48,23 @@
         </select><br><br>
         
         <label for="picture_data">Picture:</label>
-        <input type="file" id="picture_data" name="picture_data">
+        <input type="file" id="picture_data" name="picture_data"><br><br>
         
         <h2>Paragraphs</h2>
-        <div id="paragraphs-container">
-            {% for paragraph in form.paragraphs %}
-                <div class="paragraph">
-                    <label for="paragraph_title_{{ loop.index0 }}">Paragraph Title:</label>
-                    <input type="text" id="paragraph_title_{{ loop.index0 }}" name="paragraphs[{{ loop.index0 }}][title]" value="{{ paragraph.title.data }}" required><br><br>
-                    <label for="paragraph_body_{{ loop.index0 }}">Paragraph Body:</label>
-                    <textarea id="paragraph_body_{{ loop.index0 }}" name="paragraphs[{{ loop.index0 }}][body]" required>{{ paragraph.body.data }}</textarea><br><br>
-                </div>
-            {% endfor %}
-        </div>
+            <div id="paragraphs-container">
+                {% for para in form.paragraphs %}
+                    <div class="paragraph">
+                        <label for="{{ para.title.id }}">Paragraph Title:</label>
+                        {{ para.title(class="form-control") }}
+                        <label for="{{ para.body.id }}">Paragraph Body:</label>
+                        {{ para.body(class="form-control", rows=5) }}
+                    </div>
+                {% endfor %}
+            </div>
+
         
         <button type="submit">Save Changes</button>
     </form>
+    <button type="button" onclick="addParagraph()">Add Paragraph</button>
 </body>
 </html>
