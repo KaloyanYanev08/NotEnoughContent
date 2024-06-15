@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile</title>
+</head>
+<body>
+    <h1>User Profile</h1>
+    
+    {% if user.profile_picture %}
+        <img src="./static/images/def.jpg" alt="{{ user.profile_img.name }}">
+    {% else %}
+        <img src="data:{{ user.profile_img.mimetype }};base64,{{ user.profile_img.img_base64 }}" alt="{{ user.profile_img.name }}">
+    {% endif %}
+    
+    {% if user.nickname %}
+        <p><strong>Display name:</strong> {{ user.nickname }}</p>
+    {% endif %}
+    <p><strong>Username:</strong> {{ user.username }}</p>
+    
+    {% if current_user.id == user.id or current_user.role == 3 %}
+        <p><strong>Email:</strong> {{ user.email }}</p>
+    {% endif %}
+    
+    {% if user.bio %}
+        <p><strong>Bio:</strong> {{ user.bio }}</p>
+    {% endif %}
+
+    {% if current_user.role == 3 and current_user.id != user.id %}
+        {% if user.role == 1 %}
+            <form action="{{ url_for('promote_user', user_id=user.id) }}" method="post" style="display: inline;">
+                <button type="submit">Promote to Role 2</button>
+            </form>
+        {% elif user.role == 2 %}
+            <form action="{{ url_for('promote_user', user_id=user.id) }}" method="post" style="display: inline;">
+                <button type="submit">Promote to Role 3</button>
+            </form>
+            <form action="{{ url_for('demote_user', user_id=user.id) }}" method="post" style="display: inline;">
+                <button type="submit">Demote to Role 1</button>
+            </form>
+        {% endif %}
+    {% endif %}
+
+    {% if current_user.id == user.id %}
+        <p><a href="{{ url_for('edit_user_profile', user_id=user.id) }}">Edit Profile</a></p>
+        <p><a href="{{ url_for('change_password') }}">Change Password</a></p>
+    {% elif current_user.role == 3 %}
+        <p><a href="{{ url_for('edit_user_profile', user_id=user.id) }}">Edit Profile</a></p>
+    {% endif %}
+</body>
+</html>

@@ -1,14 +1,17 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin, AdminIndexView, expose
 from flask_admin.contrib.sqla import ModelView
-from wtforms import FileField, TextAreaField, SelectField, StringField, Form, FieldList, FormField, PasswordField, SubmitField, ValidationError
+from wtforms import FileField, TextAreaField, SelectField, StringField, FieldList, FormField, PasswordField, SubmitField, ValidationError,HiddenField
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin
 from wtforms.validators import DataRequired, Email, EqualTo, Length
+from werkzeug.utils import secure_filename
 from flask_wtf import FlaskForm
 import base64
 from werkzeug.security import generate_password_hash, check_password_hash
 import pkg_resources
+from sqlalchemy.exc import IntegrityError
+
 print(pkg_resources.__file__)
 
 app = Flask(__name__)
@@ -32,6 +35,8 @@ class ProfileImg(db.Model):
     img_base64 = db.Column(db.Text)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
 
+    user = db.relationship('User', backref=db.backref('profile_img', uselist=False), uselist=False)
+
     def __init__(self, name, mimetype, img_base64, user_id):
         self.name = name
         self.mimetype = mimetype
@@ -44,18 +49,21 @@ class User(db.Model, UserMixin):
     email = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     nickname = db.Column(db.String(25), nullable=True)
+    bio = db.Column(db.String(750), nullable=True)
     role = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=False, default=1)
     superuser = db.Column(db.Boolean, default=False)
 
-    def __init__(self, username, email, password, superuser=False, role=1):
+    def __init__(self, username, email, password, superuser=False, role=1, bio=None):
         self.username = username
         self.email = email
         self.password = generate_password_hash(password)
         self.role = role
         self.superuser = superuser
-    
+        self.bio = bio
+
     def check_password(self, password):
         return check_password_hash(self.password, password)
+
 
 class Img(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -102,7 +110,23 @@ def save_picture_data(article_id, picture):
         img = Img(name=filename, mimetype=mimetype, img_base64=img_base64, article_id=article_id)
         db.session.add(img)
         db.session.commit()
+        
+def save_profile_picture(user, picture_data):
+    if picture_data:
+        if user.profile_img:
+            db.session.delete(user.profile_img)
+            db.session.commit()
 
+        filename = secure_filename(picture_data.filename)
+        mimetype = picture_data.mimetype
+        img_base64 = base64.b64encode(picture_data.read()).decode('utf-8')
+
+        profile_img = ProfileImg(name=filename, mimetype=mimetype, img_base64=img_base64, user_id=user.id)
+        db.session.add(profile_img)
+        db.session.commit()
+
+        user.profile_img = profile_img
+        db.session.commit()
 
 def get_all_access_options():
     return Access.query.all()
@@ -172,15 +196,31 @@ class UserForm(FlaskForm):
     superuser = SelectField('Superuser', coerce=bool, validators=[DataRequired()])
     submit = SubmitField('Submit')
 
-class ParagraphForm(Form):
-    title = StringField('Paragraph Title')
-    body = TextAreaField('Paragraph Body')
+class UserEditForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=1, max=20)])
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    nickname = StringField('Nickname', validators=[Length(max=25)])
+    bio = TextAreaField('Bio', validators=[Length(max=750)])
+    picture_data = FileField('Profile Picture')
+    submit = SubmitField('Save')
+
+class ChangePasswordForm(FlaskForm):
+    current_password = PasswordField('Current Password', validators=[DataRequired()])
+    new_password = PasswordField('New Password', validators=[DataRequired(), Length(min=8)])
+    confirm_password = PasswordField('Confirm New Password', validators=[DataRequired(), EqualTo('new_password')])
+    submit = SubmitField('Change Password')
+
+class ParagraphForm(FlaskForm):
+    id = HiddenField('id')
+    title = StringField('Paragraph Title', validators=[DataRequired()])
+    body = TextAreaField('Paragraph Body', validators=[DataRequired()])
 
 class ArticleForm(FlaskForm):
-    title = StringField('Title')
-    description = TextAreaField('Description')
-    access_id = SelectField('Access', coerce=int)
+    title = StringField('Title', validators=[DataRequired()])
+    description = TextAreaField('Description', validators=[DataRequired()])
+    access_id = SelectField('Access', coerce=int, validators=[DataRequired()])
     paragraphs = FieldList(FormField(ParagraphForm), min_entries=1)
+    picture_data = FileField('Picture')
 
 class ArticleView(ModelView):
     form_extra_fields = {
@@ -206,10 +246,16 @@ class ArticleView(ModelView):
             save_picture_data(article_id, picture)
 
 class UserView(MyModelView):
-    column_list = ['username', 'email', 'nickname', 'role', 'superuser']
-    form_columns = ['username', 'email', 'password', 'nickname', 'role', 'superuser']
-    form_extra_fields = {
-        'password': StringField('Password'),
+    column_list = ['username', 'email', 'nickname', 'role', 'superuser', 'profile_img']
+    form_columns = ['username', 'email', 'password', 'nickname', 'role', 'superuser', 'profile_img']
+
+    def _profile_img_formatter(view, context, model, name):
+        if model.profile_img:
+            return f'<img src="data:{model.profile_img.mimetype};base64,{model.profile_img.img_base64}" style="max-width:100px;max-height:100px">'
+        return ''
+
+    column_formatters = {
+        'profile_img': _profile_img_formatter
     }
 
 class RegistrationForm(FlaskForm):
@@ -243,7 +289,11 @@ def index():
     return render_template('index.html', articles=articles, user=current_user)
 
 @app.route('/create_article', methods=['GET', 'POST'])
+@login_required
 def create_article():
+    if current_user.role != 3:
+        return redirect(url_for('index'))
+
     if request.method == 'POST':
         title = request.form['title']
         description = request.form['description']
@@ -256,8 +306,6 @@ def create_article():
 
         article_id = article.id
         save_picture_data(article_id, picture)
-
-        print(request.form.to_dict(flat=False))
 
         paragraphs_data = request.form.to_dict(flat=False)
         paragraph_titles = [key for key in paragraphs_data.keys() if key.startswith('paragraphs[') and key.endswith('].title')]
@@ -276,6 +324,7 @@ def create_article():
     else:
         access_options = get_all_access_options()
         return render_template('create_article.html', access_options=access_options)
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -334,7 +383,11 @@ def login():
     return response
 
 @app.route('/edit_article/<int:article_id>', methods=['GET', 'POST'])
+@login_required
 def edit_article(article_id):
+    if current_user.role != 3:
+        return redirect(url_for('index'))
+    
     article = Article.query.get_or_404(article_id)
     form = ArticleForm(obj=article)
 
@@ -343,30 +396,25 @@ def edit_article(article_id):
 
     if request.method == 'POST' and form.validate_on_submit():
         form.populate_obj(article)
-
-        updated_paragraphs = []
+        
         for idx, para_form in enumerate(form.paragraphs):
             para_title = para_form.title.data
             para_body = para_form.body.data
-
-            if para_title and para_body:
-                if idx < len(article.paragraphs):
-                    existing_para = article.paragraphs[idx]
-                    existing_para.title = para_title
-                    existing_para.body = para_body
-                else:
-                    new_para = Paragraph(title=para_title, body=para_body, article_id=article.id)
-                    db.session.add(new_para)
-                updated_paragraphs.append(True)
+            
+            if idx < len(article.paragraphs):
+                existing_para = article.paragraphs[idx]
+                existing_para.title = para_title
+                existing_para.body = para_body
             else:
-                updated_paragraphs.append(False)
+                new_para = Paragraph(title=para_title, body=para_body, article_id=article.id)
+                db.session.add(new_para)
 
         if len(form.paragraphs) < len(article.paragraphs):
             for idx in range(len(form.paragraphs), len(article.paragraphs)):
                 db.session.delete(article.paragraphs[idx])
-
-        if 'picture_data' in request.files:
-            picture = request.files['picture_data']
+        
+        if form.picture_data.data:
+            picture = form.picture_data.data
             save_picture_data(article.id, picture)
 
         db.session.commit()
@@ -374,6 +422,126 @@ def edit_article(article_id):
         return redirect(url_for('index'))
 
     return render_template('edit_article.html', form=form, article=article)
+
+@app.route('/user/<int:user_id>')
+@login_required
+def view_user_profile(user_id):
+    user = User.query.get_or_404(user_id)
+    return render_template('user_profile.html', user=user)
+
+@app.route('/edit_profile/<int:user_id>', methods=['GET', 'POST'])
+@login_required
+def edit_user_profile(user_id):
+    user = User.query.get_or_404(user_id)
+    
+    if current_user.role != 3 and current_user.id != user_id:
+        abort(403)
+        
+    form = UserEditForm(obj=user)
+
+    if request.method == 'POST' and form.validate_on_submit():
+        form.populate_obj(user)
+
+        existing_user = User.query.filter(User.username == form.username.data, User.id != user.id).first()
+        if existing_user:
+            flash('Username is already taken. Please choose a different one.', 'danger')
+            return redirect(url_for('edit_user_profile', user_id=user.id))
+
+        try:
+            if form.picture_data.data:
+                save_profile_picture(user, form.picture_data.data)
+
+            db.session.commit()
+            flash('Profile updated successfully!', 'success')
+            return redirect(url_for('view_user_profile', user_id=user.id))
+        except IntegrityError as e:
+            db.session.rollback()
+            flash('Error updating profile. Please try again later.', 'danger')
+            app.logger.error(f'IntegrityError: {str(e)}')
+
+    return render_template('edit_profile.html', form=form, user=user)
+
+@app.route('/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    form = ChangePasswordForm()
+
+    if request.method == 'POST' and form.validate_on_submit():
+        current_password = form.current_password.data
+        new_password = form.new_password.data
+
+        if current_user.check_password(current_password):
+            current_user.password = generate_password_hash(new_password)
+            db.session.commit()
+            flash('Password changed successfully!', 'success')
+            return redirect(url_for('view_user_profile', user_id=current_user.id))
+        else:
+            flash('Current password is incorrect.', 'danger')
+
+    return render_template('change_password.html', form=form)
+
+@app.route('/delete_article/<int:article_id>', methods=['DELETE'])
+@login_required
+def delete_article(article_id):
+    if request.method == 'DELETE':
+        article = Article.query.get_or_404(article_id)
+
+        if current_user.role != 3:
+            return redirect(url_for('index'))
+
+        for paragraph in article.paragraphs:
+            db.session.delete(paragraph)
+
+        img = Img.query.filter_by(article_id=article_id).first()
+        if img:
+            db.session.delete(img)
+
+        db.session.delete(article)
+        db.session.commit()
+
+        flash('Article deleted successfully!', 'success')
+        return redirect(url_for('index'))
+
+    else:
+        abort(405)
+
+@app.route('/promote_user/<int:user_id>')
+@login_required
+def promote_user(user_id):
+    if current_user.role != 3:
+        return redirect(url_for('view_user_profile', user_id=user_id))
+
+    user = User.query.get_or_404(user_id)
+    if user.role == 1:
+        user.role = 2
+        db.session.commit()
+        flash(f'User {user.username} promoted to Role 2.', 'success')
+    elif user.role == 2:
+        user.role = 3
+        db.session.commit()
+        flash(f'User {user.username} promoted to Role 3.', 'success')
+    else:
+        flash('User is already at the highest role.', 'warning')
+
+    return redirect(url_for('view_user_profile', user_id=user_id))
+
+@app.route('/demote_user/<int:user_id>')
+@login_required
+def demote_user(user_id):
+    if current_user.role != 3:
+        return redirect(url_for('view_user_profile', user_id=user_id))
+
+    user = User.query.get_or_404(user_id)
+    if user.role == 3:
+        flash('Cannot demote a Role 3 user. Only superusers can do this.', 'danger')
+    elif user.role == 2:
+        user.role = 1
+        db.session.commit()
+        flash(f'User {user.username} demoted to Role 1.', 'success')
+    else:
+        flash('User is already at the lowest role.', 'warning')
+
+    return redirect(url_for('view_user_profile', user_id=user_id))
 
 if __name__ == "__main__":
     app.run(debug=True)
