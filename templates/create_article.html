@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Create Article</title>
     <script>
+        let paraCount = 1;
         function addParagraph() {
             const container = document.getElementById('paragraphs-container');
             const index = container.children.length / 5;
@@ -28,7 +29,9 @@
             container.appendChild(bodyInput);
             container.appendChild(document.createElement('br'));
 
-            document.getElementById('remove-paragraph-btn').disabled = false;
+            paraCount++;
+
+            updateButtonState();
         }
 
         function removeParagraph() {
@@ -42,15 +45,25 @@
                 container.removeChild(container.lastElementChild);
             }
 
-            if (container.children.length <= 6) {
-                document.getElementById('remove-paragraph-btn').disabled = true;
+            paraCount--;
+
+            updateButtonState();
+        }
+
+        function updateButtonState() {
+            const removeButton = document.getElementById('remove-paragraph-btn');
+            if (paraCount <= 1) {
+                removeButton.disabled = true;
+            } else {
+                removeButton.disabled = false;
             }
         }
+        
     </script>
 </head>
 <body>
     <h1>Create New Article</h1>
-    <form action="/create_article" method="post" enctype="multipart/form-data">
+    <form action="/articles/create" method="post" enctype="multipart/form-data">
         <label for="title">Title:</label>
         <input type="text" id="title" name="title" required><br><br>
         

@@ -90,6 +90,9 @@ class Article(db.Model):
         self.description = description
         self.access_id = access_id
 
+    def get_article_by_id(article_id):
+        return Article.query.get(article_id)
+
 class Paragraph(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100), nullable=False)
@@ -119,14 +122,17 @@ def save_profile_picture(user, picture_data):
 
         filename = secure_filename(picture_data.filename)
         mimetype = picture_data.mimetype
-        img_base64 = base64.b64encode(picture_data.read()).decode('utf-8')
 
-        profile_img = ProfileImg(name=filename, mimetype=mimetype, img_base64=img_base64, user_id=user.id)
-        db.session.add(profile_img)
-        db.session.commit()
+        if mimetype.startswith('image/gif') and user.role in [2, 3]:
+            img_base64 = base64.b64encode(picture_data.read()).decode('utf-8')
+            profile_img = ProfileImg(name=filename, mimetype=mimetype, img_base64=img_base64, user_id=user.id)
+            db.session.add(profile_img)
+            db.session.commit()
 
-        user.profile_img = profile_img
-        db.session.commit()
+            user.profile_img = profile_img
+            db.session.commit()
+        else:
+            flash('Invalid file format or insufficient permissions to upload GIF.', 'danger')
 
 def get_all_access_options():
     return Access.query.all()
@@ -282,13 +288,9 @@ class LoginForm(FlaskForm):
 
 @app.route('/')
 def index():
-    articles = Article.query.all()
-    for article in articles:
-        article.picture = Img.query.filter_by(article_id=article.id).first()
-        article.paragraphs = Paragraph.query.filter_by(article_id=article.id).all()
     return render_template('index.html', articles=articles, user=current_user)
 
-@app.route('/create_article', methods=['GET', 'POST'])
+@app.route('/articles/create', methods=['GET', 'POST'])
 @login_required
 def create_article():
     if current_user.role != 3:
@@ -320,13 +322,12 @@ def create_article():
 
         db.session.commit()
 
-        return 'Article created successfully!'
+        return redirect(url_for('articles'))
     else:
         access_options = get_all_access_options()
         return render_template('create_article.html', access_options=access_options)
 
-
-@app.route('/register', methods=['GET', 'POST'])
+@app.route('/users/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated:
         return redirect(url_for('index'))
@@ -350,14 +351,14 @@ def register():
     return render_template('register.html', form=form)
 
 
-@app.route('/logout')
+@app.route('/users/logout')
 @login_required
 def logout():
     logout_user()
     flash('You have been logged out.', 'success')
     return redirect(url_for('index'))
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/users/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('index'))
@@ -382,7 +383,7 @@ def login():
     response.headers['Content-Type'] = 'text/html'
     return response
 
-@app.route('/edit_article/<int:article_id>', methods=['GET', 'POST'])
+@app.route('/articles/edit/<int:article_id>', methods=['GET', 'POST'])
 @login_required
 def edit_article(article_id):
     if current_user.role != 3:
@@ -390,17 +391,16 @@ def edit_article(article_id):
     
     article = Article.query.get_or_404(article_id)
     form = ArticleForm(obj=article)
+    
+    form.access_id.choices = [(access.id, access.name) for access in get_all_access_options()]
 
-    access_options = get_all_access_options() or []
-    form.access_id.choices = [(access.id, access.name) for access in access_options]
-
-    if request.method == 'POST' and form.validate_on_submit():
+    if form.validate_on_submit():
         form.populate_obj(article)
-        
+
         for idx, para_form in enumerate(form.paragraphs):
             para_title = para_form.title.data
             para_body = para_form.body.data
-            
+
             if idx < len(article.paragraphs):
                 existing_para = article.paragraphs[idx]
                 existing_para.title = para_title
@@ -412,31 +412,37 @@ def edit_article(article_id):
         if len(form.paragraphs) < len(article.paragraphs):
             for idx in range(len(form.paragraphs), len(article.paragraphs)):
                 db.session.delete(article.paragraphs[idx])
-        
+
         if form.picture_data.data:
             picture = form.picture_data.data
             save_picture_data(article.id, picture)
 
         db.session.commit()
+        
         flash('Article updated successfully!', 'success')
-        return redirect(url_for('index'))
+        return redirect(url_for('articles'))
+    else:
+        print(form.errors)
 
-    return render_template('edit_article.html', form=form, article=article)
+    return render_template('edit.html', form=form, article=article)
 
-@app.route('/user/<int:user_id>')
+@app.route('/users/<int:user_id>')
 @login_required
 def view_user_profile(user_id):
     user = User.query.get_or_404(user_id)
     return render_template('user_profile.html', user=user)
 
-@app.route('/edit_profile/<int:user_id>', methods=['GET', 'POST'])
+@app.route('/users/edit/<int:user_id>', methods=['GET', 'POST'])
 @login_required
 def edit_user_profile(user_id):
     user = User.query.get_or_404(user_id)
-    
-    if current_user.role != 3 and current_user.id != user_id:
+
+    if current_user.role == 3:
+        if user.role == 3 and not current_user.superuser:
+            abort(403)
+    elif current_user.id != user_id:
         abort(403)
-        
+
     form = UserEditForm(obj=user)
 
     if request.method == 'POST' and form.validate_on_submit():
@@ -461,7 +467,7 @@ def edit_user_profile(user_id):
 
     return render_template('edit_profile.html', form=form, user=user)
 
-@app.route('/change_password', methods=['GET', 'POST'])
+@app.route('/users/change_password', methods=['GET', 'POST'])
 @login_required
 def change_password():
     form = ChangePasswordForm()
@@ -480,10 +486,10 @@ def change_password():
 
     return render_template('change_password.html', form=form)
 
-@app.route('/delete_article/<int:article_id>', methods=['DELETE'])
+@app.route('/articles/delete/<int:article_id>', methods=['POST', 'DELETE'])
 @login_required
 def delete_article(article_id):
-    if request.method == 'DELETE':
+    if request.method == 'POST' or request.method == 'DELETE':
         article = Article.query.get_or_404(article_id)
 
         if current_user.role != 3:
@@ -500,48 +506,122 @@ def delete_article(article_id):
         db.session.commit()
 
         flash('Article deleted successfully!', 'success')
-        return redirect(url_for('index'))
+        return redirect(url_for('articles'))
+    
+    else:
+        abort(405)
+
+
+@app.route('/users/promote_user/<int:user_id>', methods=['GET', 'POST'])
+@login_required
+def promote_user(user_id):
+    if request.method == 'POST':
+        if current_user.role != 3:
+            return redirect(url_for('view_user_profile', user_id=user_id))
+
+        user = User.query.get_or_404(user_id)
+        if user.role == 1:
+            user.role = 2
+            db.session.commit()
+            flash(f'User {user.username} promoted to Role 2.', 'success')
+        elif user.role == 2:
+            user.role = 3
+            db.session.commit()
+            flash(f'User {user.username} promoted to Role 3.', 'success')
+        else:
+            flash('User is already at the highest role.', 'warning')
+
+        return redirect(url_for('view_user_profile', user_id=user_id))
+
+    return redirect(url_for('view_user_profile', user_id=user_id))
+
+
+@app.route('/users/demote_user/<int:user_id>', methods=['GET', 'POST'])
+@login_required
+def demote_user(user_id):
+    if request.method == 'POST':
+        if current_user.role != 3:
+            return redirect(url_for('view_user_profile', user_id=user_id))
+
+        user = User.query.get_or_404(user_id)
+        if user.role == 3:
+            if current_user.superuser == True:
+                user.role = 2
+                db.session.commit()
+                flash(f'User {user.username} demoted to Role 2.', 'success')
+            else:
+                flash('Cannot demote a Role 3 user. Only superusers can do this.', 'danger')
+        elif user.role == 2:
+            user.role = 1
+            db.session.commit()
+            flash(f'User {user.username} demoted to Role 1.', 'success')
+        else:
+            flash('User is already at the lowest role.', 'warning')
+
+    return redirect(url_for('view_user_profile', user_id=user_id))
+
+@app.route('/users/promote_to_superuser/<int:user_id>', methods=['GET', 'POST'])
+@login_required
+def promote_to_superuser(user_id):
+    if request.method == 'POST':
+        if current_user.role != 3 and current_user.superuser == False:
+            return redirect(url_for('view_user_profile', user_id=user_id))
+
+        user = User.query.get_or_404(user_id)
+        if user.role == 3:
+            user.superuser = True
+            db.session.commit()
+            flash(f'User {user.username} promoted to Superuser.', 'success')
+        else:
+            flash('User is already a Superuser.', 'warning')
+
+        return redirect(url_for('view_user_profile', user_id=user_id))
+
+    return redirect(url_for('view_user_profile', user_id=user_id))
+
+@app.route('/users/delete/<int:user_id>', methods=['POST', 'DELETE'])
+@login_required
+def delete_user(user_id):
+    if request.method == 'POST' or request.method == 'DELETE':
+        user_to_delete = User.query.get_or_404(user_id)
+
+        if current_user.id == user_id:
+            db.session.delete(user_to_delete)
+            db.session.commit()
+
+            logout_user()
+            flash('Your account has been deleted successfully.', 'success')
+            return redirect(url_for('index'))
+        else:
+            abort(403)
 
     else:
         abort(405)
 
-@app.route('/promote_user/<int:user_id>')
-@login_required
-def promote_user(user_id):
-    if current_user.role != 3:
-        return redirect(url_for('view_user_profile', user_id=user_id))
+@app.route('/articles')
+def articles():
+    articles = Article.query.all()
+    for article in articles:
+        article.picture = Img.query.filter_by(article_id=article.id).first()
+        article.paragraphs = Paragraph.query.filter_by(article_id=article.id).all()
+    return render_template('articles.html', articles=articles)
 
-    user = User.query.get_or_404(user_id)
-    if user.role == 1:
-        user.role = 2
-        db.session.commit()
-        flash(f'User {user.username} promoted to Role 2.', 'success')
-    elif user.role == 2:
-        user.role = 3
-        db.session.commit()
-        flash(f'User {user.username} promoted to Role 3.', 'success')
-    else:
-        flash('User is already at the highest role.', 'warning')
+@app.route('/articles/<int:article_id>')
+def article(article_id):
+    article = Article.get_article_by_id(article_id)
 
-    return redirect(url_for('view_user_profile', user_id=user_id))
+    if not article:
+        return redirect(url_for('articles'))
 
-@app.route('/demote_user/<int:user_id>')
-@login_required
-def demote_user(user_id):
-    if current_user.role != 3:
-        return redirect(url_for('view_user_profile', user_id=user_id))
+    article.picture = Img.query.filter_by(article_id=article.id).first()
+    article.paragraphs = Paragraph.query.filter_by(article_id=article.id).all()
 
-    user = User.query.get_or_404(user_id)
-    if user.role == 3:
-        flash('Cannot demote a Role 3 user. Only superusers can do this.', 'danger')
-    elif user.role == 2:
-        user.role = 1
-        db.session.commit()
-        flash(f'User {user.username} demoted to Role 1.', 'success')
-    else:
-        flash('User is already at the lowest role.', 'warning')
+    if article.access_id == 2 and current_user.role < 2:
+        return redirect(url_for('articles'))
 
-    return redirect(url_for('view_user_profile', user_id=user_id))
+    if not article:
+        abort(404)
+    return render_template('article.html', article=article)
 
 if __name__ == "__main__":
     app.run(debug=True)

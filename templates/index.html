@@ -3,16 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Articles</title>
+    <title>Home</title>
 </head>
 <body>
+    <h1>Articles</h1>
     {% if user.is_authenticated %}
-        <h1>You are logged in</h1>
         <div>
             <h2>Welcome, {% if user.nickname %}{{ user.nickname }}{% else %}{{ user.username }}{% endif %}</h2>
-            {% if user.profile_img %}
-                <img src="data:{{ user.profile_img.mimetype }};base64,{{ user.profile_img.img_base64 }}" alt="{{ user.profile_img.name }}">
-            {% endif %}
         </div>
         <div>
             <a href="{{ url_for('logout') }}">
@@ -40,32 +37,5 @@
             </a>
         </div>
     {% endif %}
-    <h1>Articles</h1>
-    <div>
-        {% for article in articles %}
-            <h2>{{ article.title }}</h2>
-            <p>{{ article.description }}</p>
-            {% if article.picture %}
-                <img src="data:{{ article.picture.mimetype }};base64,{{ article.picture.img_base64 }}" alt="{{ article.picture.name }}">
-            {% endif %}
-            {% if article.access %}
-                <p>Access: {{ article.access.name }}</p>
-            {% endif %}
-            {% for paragraph in article.paragraphs %}
-                <h3>{{ paragraph.title }}</h3>
-                <p>{{ paragraph.body }}</p>
-            {% endfor %}
-            
-            {% if current_user.is_authenticated and current_user.role == 3 %}
-                <a href="{{ url_for('edit_article', article_id=article.id) }}">
-                    <button>Edit Article</button>
-                </a>
-                <form action="{{ url_for('delete_article', article_id=article.id) }}" method="post" style="display: inline;">
-                    <input type="hidden" name="_method" value="DELETE">
-                    <button type="submit" onclick="return confirm('Are you sure you want to delete this article?')">Delete Article</button>
-                </form>
-            {% endif %}
-        {% endfor %}
-    </div>
 </body>
 </html>

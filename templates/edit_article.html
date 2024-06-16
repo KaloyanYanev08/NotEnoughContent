@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Edit Article</title>
     <script>
-        let curr = 0;
+        let curr = {{ form.paragraphs|length }};
 
         function addParagraph() {
             const container = document.getElementById('paragraphs-container');
@@ -35,8 +35,8 @@
 
             container.appendChild(paragraphDiv);
 
-            document.getElementById('remove-paragraph-btn').disabled = false;
             curr++;
+            updateButtonState();
         }
 
         function removeParagraph() {
@@ -47,9 +47,9 @@
                 const lastParagraph = paragraphs[paragraphs.length - 1];
                 container.removeChild(lastParagraph);
 
-                if (paragraphs.length <= 1) {
-                    document.getElementById('remove-paragraph-btn').disabled = true;
-                }
+                // Update current count and manage button state
+                curr--;
+                updateButtonState();
 
                 adjustIndexes();
 
@@ -78,6 +78,11 @@
                 }
             });
         }
+
+        function updateButtonState() {
+            const removeButton = document.getElementById('remove-paragraph-btn');
+            removeButton.disabled = (curr <= 1);
+        }
     </script>
 </head>
 <body>
@@ -104,6 +109,7 @@
         <div id="paragraphs-container">
             {% for para in form.paragraphs %}
                 <div class="paragraph">
+                    {{ para.hidden_tag() }}
                     <label for="{{ para.title.id }}">Paragraph Title:</label>
                     {{ para.title(class="form-control") }}<br>
                     <label for="{{ para.body.id }}">Paragraph Body:</label>
