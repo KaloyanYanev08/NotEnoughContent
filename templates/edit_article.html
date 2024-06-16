@@ -3,91 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <title>Edit Article</title>
-    <script>
-        let curr = {{ form.paragraphs|length }};
-
-        function addParagraph() {
-            const container = document.getElementById('paragraphs-container');
-            const index = curr;
-
-            const paragraphDiv = document.createElement('div');
-            paragraphDiv.className = 'paragraph';
-
-            const titleLabel = document.createElement('label');
-            titleLabel.innerText = 'Paragraph Title:';
-            const titleInput = document.createElement('input');
-            titleInput.type = 'text';
-            titleInput.name = `paragraphs[${index}].title`;
-            titleInput.required = true;
-
-            const bodyLabel = document.createElement('label');
-            bodyLabel.innerText = 'Paragraph Body:';
-            const bodyInput = document.createElement('textarea');
-            bodyInput.name = `paragraphs[${index}].body`;
-            bodyInput.required = true;
-
-            paragraphDiv.appendChild(titleLabel);
-            paragraphDiv.appendChild(titleInput);
-            paragraphDiv.appendChild(document.createElement('br'));
-            paragraphDiv.appendChild(bodyLabel);
-            paragraphDiv.appendChild(bodyInput);
-            paragraphDiv.appendChild(document.createElement('br'));
-
-            container.appendChild(paragraphDiv);
-
-            curr++;
-            updateButtonState();
-        }
-
-        function removeParagraph() {
-            const container = document.getElementById('paragraphs-container');
-            const paragraphs = container.querySelectorAll('.paragraph');
-
-            if (paragraphs.length > 0) {
-                const lastParagraph = paragraphs[paragraphs.length - 1];
-                container.removeChild(lastParagraph);
-
-                // Update current count and manage button state
-                curr--;
-                updateButtonState();
-
-                adjustIndexes();
-
-                const paraIdInput = lastParagraph.querySelector('input[name^="paragraphs["][name$="].id"]');
-                if (paraIdInput && paraIdInput.value) {
-                    const deleteInput = document.createElement('input');
-                    deleteInput.type = 'hidden';
-                    deleteInput.name = 'deleted_paragraphs';
-                    deleteInput.value = paraIdInput.value;
-                    container.appendChild(deleteInput);
-                }
-            }
-        }
-
-        function adjustIndexes() {
-            const container = document.getElementById('paragraphs-container');
-            const paragraphs = container.querySelectorAll('.paragraph');
-
-            paragraphs.forEach((para, index) => {
-                const titleInput = para.querySelector('input[name^="paragraphs["][name$="].title"]');
-                const bodyInput = para.querySelector('textarea[name^="paragraphs["][name$="].body"]');
-
-                if (titleInput && bodyInput) {
-                    titleInput.name = `paragraphs[${index}].title`;
-                    bodyInput.name = `paragraphs[${index}].body`;
-                }
-            });
-        }
-
-        function updateButtonState() {
-            const removeButton = document.getElementById('remove-paragraph-btn');
-            removeButton.disabled = (curr <= 1);
-        }
-    </script>
 </head>
 <body>
     <h1>Edit Article</h1>
-    <form action="/edit_article/{{ article.id }}" method="post" enctype="multipart/form-data">
+    <form action="/articles/edit/{{ article.id }}" method="post" enctype="multipart/form-data">
         {{ form.hidden_tag() }}
         <label for="title">Title:</label>
         <input type="text" id="title" name="title" value="{{ form.title.data }}" required><br><br>
@@ -101,25 +20,11 @@
                 <option value="{{ access_id }}" {% if access_id == form.access_id.data %} selected {% endif %}>{{ access_name }}</option>
             {% endfor %}
         </select><br><br>
-        
         <label for="picture_data">Picture:</label>
-        <input type="file" id="picture_data" name="picture_data"><br><br>
-        
-        <h2>Paragraphs</h2>
-        <div id="paragraphs-container">
-            {% for para in form.paragraphs %}
-                <div class="paragraph">
-                    {{ para.hidden_tag() }}
-                    <label for="{{ para.title.id }}">Paragraph Title:</label>
-                    {{ para.title(class="form-control") }}<br>
-                    <label for="{{ para.body.id }}">Paragraph Body:</label>
-                    {{ para.body(class="form-control", rows=5) }}<br>
-                </div>
-            {% endfor %}
-        </div>
-        <button type="button" onclick="addParagraph()">Add Paragraph</button>
-        <button type="button" id="remove-paragraph-btn" onclick="removeParagraph()" {% if form.paragraphs|length <= 1 %}disabled{% endif %}>Remove Paragraph</button><br><br>
+        <input type="file" id="picture_data" name="picture_data">
+        <br><br>
         <button type="submit">Save Changes</button>
+        <br><br>
     </form>
 </body>
 </html>

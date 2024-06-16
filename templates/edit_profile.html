@@ -9,18 +9,40 @@
     <h1>Edit User Profile</h1>
     <form method="POST" enctype="multipart/form-data">
         {{ form.hidden_tag() }}
-        {{ form.username.label }}: {{ form.username(size=20) }}<br>
-        {{ form.email.label }}: {{ form.email(size=30) }}<br>
-        {{ form.nickname.label }}: {{ form.nickname(size=25) }}<br>
-        {{ form.bio.label }}: {{ form.bio(cols=40, rows=5) }}<br>
-        {{ form.picture_data.label }}: {{ form.picture_data }}<br>
+        {{ form.username.label }}: {{ form.username(size=20) }}<br><br>
+        {{ form.email.label }}: {{ form.email(size=30) }}<br><br>
+        {{ form.nickname.label }}: {{ form.nickname(size=25) }}<br><br>
+        {{ form.bio.label }}: {{ form.bio(cols=40, rows=5) }}<br><br>
+        {{ form.picture_data.label }}: {{ form.picture_data }}<br><br>
         {{ form.submit() }}
     </form>
+    <a href="{{ url_for('index') }}">
+        <button>Back</button>
+    </a>
 
-    <form id="delete-form" action="{{ url_for('delete_user', user_id=current_user.id) }}" method="POST">
-        <input type="hidden" name="_method" value="DELETE">
-        <button type="button" class="btn btn-danger" onclick="confirmDelete()">Delete Profile</button>
-    </form>
+    <br>
+    <br>
+
+    {% if current_user.id == user.id%}
+        <a href="{{ url_for('change_password') }}">
+            <button>Change Password</button>
+        </a>
+        <a href="{{ url_for('logout') }}">
+            <button>Log out</button>
+        </a>
+        <br>
+        <br>
+        <br>
+        <form id="delete-form" action="{{ url_for('delete_user', user_id=current_user.id) }}" method="POST">
+            <input type="hidden" name="_method" value="DELETE">
+            <button type="button" class="btn btn-danger" onclick="confirmDelete()">Delete Profile</button>
+        </form>
+    {% elif current_user.superuser%}
+        <form id="delete-form" action="{{ url_for('delete_user', user_id=current_user.id) }}" method="POST">
+            <input type="hidden" name="_method" value="DELETE">
+            <button type="button" class="btn btn-danger" onclick="confirmDelete()">Delete Profile</button>
+        </form>
+    {% endif %}
     
     <script>
         function confirmDelete() {

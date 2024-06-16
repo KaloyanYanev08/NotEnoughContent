@@ -221,11 +221,18 @@ class ParagraphForm(FlaskForm):
     title = StringField('Paragraph Title', validators=[DataRequired()])
     body = TextAreaField('Paragraph Body', validators=[DataRequired()])
 
+class ParagraphEditForm(FlaskForm):
+    id = HiddenField('id')
+    title = StringField('Paragraph Title', validators=[DataRequired()])
+    body = TextAreaField('Paragraph Body', validators=[DataRequired()])
+    save = SubmitField('Save')
+    delete = SubmitField('Delete')
+
+
 class ArticleForm(FlaskForm):
     title = StringField('Title', validators=[DataRequired()])
     description = TextAreaField('Description', validators=[DataRequired()])
     access_id = SelectField('Access', coerce=int, validators=[DataRequired()])
-    paragraphs = FieldList(FormField(ParagraphForm), min_entries=1)
     picture_data = FileField('Picture')
 
 class ArticleView(ModelView):
@@ -387,32 +394,15 @@ def login():
 @login_required
 def edit_article(article_id):
     if current_user.role != 3:
-        return redirect(url_for('index'))
-    
+        return redirect(url_for('articles'))
+
     article = Article.query.get_or_404(article_id)
     form = ArticleForm(obj=article)
-    
-    form.access_id.choices = [(access.id, access.name) for access in get_all_access_options()]
+    form.access_id.choices = [(a.id, a.name) for a in get_all_access_options()]
 
     if form.validate_on_submit():
         form.populate_obj(article)
-
-        for idx, para_form in enumerate(form.paragraphs):
-            para_title = para_form.title.data
-            para_body = para_form.body.data
-
-            if idx < len(article.paragraphs):
-                existing_para = article.paragraphs[idx]
-                existing_para.title = para_title
-                existing_para.body = para_body
-            else:
-                new_para = Paragraph(title=para_title, body=para_body, article_id=article.id)
-                db.session.add(new_para)
-
-        if len(form.paragraphs) < len(article.paragraphs):
-            for idx in range(len(form.paragraphs), len(article.paragraphs)):
-                db.session.delete(article.paragraphs[idx])
-
+        
         if form.picture_data.data:
             picture = form.picture_data.data
             save_picture_data(article.id, picture)
@@ -420,11 +410,9 @@ def edit_article(article_id):
         db.session.commit()
         
         flash('Article updated successfully!', 'success')
-        return redirect(url_for('articles'))
-    else:
-        print(form.errors)
+        return redirect(url_for('articles', article_id=article.id))
 
-    return render_template('edit.html', form=form, article=article)
+    return render_template('edit_article.html', form=form, article=article)
 
 @app.route('/users/<int:user_id>')
 @login_required
@@ -432,7 +420,7 @@ def view_user_profile(user_id):
     user = User.query.get_or_404(user_id)
     return render_template('user_profile.html', user=user)
 
-@app.route('/users/edit/<int:user_id>', methods=['GET', 'POST'])
+@app.route('/users/<int:user_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_user_profile(user_id):
     user = User.query.get_or_404(user_id)
@@ -585,11 +573,10 @@ def delete_user(user_id):
     if request.method == 'POST' or request.method == 'DELETE':
         user_to_delete = User.query.get_or_404(user_id)
 
-        if current_user.id == user_id:
+        if current_user.id == user_id or current_user.superuser:
             db.session.delete(user_to_delete)
             db.session.commit()
 
-            logout_user()
             flash('Your account has been deleted successfully.', 'success')
             return redirect(url_for('index'))
         else:
@@ -621,7 +608,79 @@ def article(article_id):
 
     if not article:
         abort(404)
-    return render_template('article.html', article=article)
+    return render_template('article.html', article=article, paragraph=article.paragraphs)
+
+@app.route('/articles/<int:article_id>/paragraphs', methods=['GET', 'POST'])
+@login_required
+def article_paragraphs(article_id):
+    article = Article.query.get_or_404(article_id)
+    article.picture = Img.query.filter_by(article_id=article.id).first()
+    
+    if current_user.role != 3:
+        return redirect(url_for('articles'))
+    
+    paragraphs = Paragraph.query.filter_by(article_id=article_id).all()
+
+    return render_template('article_paragraphs.html', article=article, article_id=article.id, paragraphs=paragraphs)
+
+@app.route('/articles/<int:article_id>/paragraphs/<int:paragraph_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_paragraph(article_id, paragraph_id):
+    article = Article.query.get_or_404(article_id)
+    article.picture = Img.query.filter_by(article_id=article.id).first()
+    paragraph = Paragraph.query.get_or_404(paragraph_id)
+
+    if current_user.role != 3:
+        return redirect(url_for('articles'))
+
+    form = ParagraphEditForm(obj=paragraph)
+
+    if form.validate_on_submit():
+        form.populate_obj(paragraph)
+        db.session.commit()
+        
+        flash('Paragraph updated successfully!', 'success')
+        return redirect(url_for('article_paragraphs', article_id=article_id))
+    
+    return render_template('edit_paragraph.html', form=form, article=article, paragraph=paragraph, article_id=article.id)
+
+@app.route('/articles/<int:article_id>/paragraphs/<int:paragraph_id>/delete', methods=['POST','DELETE'])
+@login_required
+def delete_paragraph(article_id, paragraph_id):
+    if current_user.role != 3:
+        return redirect(url_for('articles'))
+    
+    if request.method == 'POST' or request.method == 'DELETE':
+        paragraph = Paragraph.query.get_or_404(paragraph_id)
+        db.session.delete(paragraph)
+        db.session.commit()
+        flash('Paragraph deleted successfully!', 'success')
+
+    return redirect(url_for('article_paragraphs', article_id=article_id))
+
+@app.route('/articles/<int:article_id>/paragraphs/create', methods=['GET', 'POST'])
+@login_required
+def create_paragraph(article_id):
+    article = Article.query.get_or_404(article_id)
+    
+    if current_user.role != 3:
+        return redirect(url_for('articles'))
+    
+    form = ParagraphForm()
+
+    if form.validate_on_submit():
+        paragraph = Paragraph(
+            title=form.title.data,
+            body=form.body.data,
+            article_id=article_id
+        )
+        db.session.add(paragraph)
+        db.session.commit()
+        
+        flash('Paragraph created successfully!', 'success')
+        return redirect(url_for('article_paragraphs', article_id=article_id))
+    
+    return render_template('create_paragraph.html', form=form, article=article)
 
 if __name__ == "__main__":
     app.run(debug=True)

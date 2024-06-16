@@ -6,20 +6,18 @@
     <title>Home</title>
 </head>
 <body>
-    <h1>Articles</h1>
+    <h1>Home</h1>
+    <p>Welcome to nec!</p>
     {% if user.is_authenticated %}
         <div>
-            <h2>Welcome, {% if user.nickname %}{{ user.nickname }}{% else %}{{ user.username }}{% endif %}</h2>
+            <h2>User: {% if user.nickname %}{{ user.nickname }}{% else %}{{ user.username }}{% endif %}</h2>
         </div>
         <div>
-            <a href="{{ url_for('logout') }}">
-                <button>Logout</button>
-            </a>
-            <a href="{{ url_for('create_article') }}">
-                <button>Create Article</button>
-            </a>
             <a href="{{ url_for('view_user_profile', user_id=current_user.id) }}">
                 <button>Your Profile</button>
+            </a>
+            <a href="{{ url_for('articles') }}">
+                <button>Articles</button>
             </a>
             {% if current_user.superuser %}
                 <a href="{{ url_for('admin.index') }}">

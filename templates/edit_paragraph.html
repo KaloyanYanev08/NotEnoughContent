@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Edit Paragraph</title>
+</head>
+<body>
+    <h2>Edit Paragraph</h2>
+    <form method="POST">
+        {{ form.hidden_tag() }}
+        <div>
+            {{ form.title.label }}
+            {{ form.title(class="form-control") }}
+        </div>
+        <div>
+            {{ form.body.label }}
+            {{ form.body(class="form-control") }}
+        </div>
+        <div>
+            {{ form.save(class="btn btn-primary") }}
+            <a href="{{ url_for('article_paragraphs', article_id=article.id) }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</body>
+</html>
